@@ -1496,6 +1496,16 @@ static struct deviceproptableu16 whitebalance[] = {
 	{ N_("Fluorescent: Day White"),	0x8004, PTP_VENDOR_PENTAX },
 	{ N_("Fluorescent: White"),	0x8005, PTP_VENDOR_PENTAX },
 	{ N_("Fluorescent: Tungsten"),	0x8006, PTP_VENDOR_PENTAX },
+    { N_("Shade"),                  0x8001, PTP_VENDOR_MICROSOFT },
+    { N_("Cloudy"),                 0x8002, PTP_VENDOR_MICROSOFT },
+    { N_("Tungsten 2"),             0x8020, PTP_VENDOR_MICROSOFT },
+    { N_("Fluorescent: Daylight"),  0x8003, PTP_VENDOR_MICROSOFT },
+    { N_("Fluorescent: Day White"), 0x8004, PTP_VENDOR_MICROSOFT },
+    { N_("Fluorescent: White"),     0x8005, PTP_VENDOR_MICROSOFT },
+    { N_("Fluorescent: Tungsten"),  0x8006, PTP_VENDOR_MICROSOFT },
+    { N_("CT settings"),            0x8007, PTP_VENDOR_MICROSOFT },
+    { N_("Underwater"),             0x8008, PTP_VENDOR_MICROSOFT },
+
 };
 GENERIC16TABLE(WhiteBalance,whitebalance)
 
