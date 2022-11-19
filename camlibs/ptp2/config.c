@@ -10802,6 +10802,7 @@ static struct submenu capture_settings_menu[] = {
 	{ N_("Shutter Speed"),                  "shutterspeed",             PTP_DPC_SONY_ShutterSpeed2,             PTP_VENDOR_SONY,    PTP_DTC_UINT32,  _get_Sony_ShutterSpeed,             _put_Sony_ShutterSpeed },
 	{ N_("Shutter Speed"),                  "shutterspeed",             PTP_DPC_SONY_ShutterSpeed,              PTP_VENDOR_SONY,    PTP_DTC_UINT32,  _get_Sony_ShutterSpeed,             _put_Sony_ShutterSpeed },
 	{ N_("Shutter Speed"),                  "shutterspeed",             PTP_DPC_RICOH_ShutterSpeed,             PTP_VENDOR_PENTAX,  PTP_DTC_UINT64, _get_Ricoh_ShutterSpeed,            _put_Ricoh_ShutterSpeed },
+	{ N_("Shutter Speed"), 					"shutterspeed", 			PTP_DPC_RICOH_ShutterSpeed, 			PTP_VENDOR_MICROSOFT, 		PTP_DTC_UINT64, _get_Ricoh_ShutterSpeed, _put_Ricoh_ShutterSpeed },	
 	{ N_("Shutter Speed"),                  "shutterspeed",             PTP_DPC_GP_SIGMA_FP_ShutterSpeed,       PTP_VENDOR_GP_SIGMAFP, PTP_DTC_UINT64, _get_SigmaFP_ShutterSpeed,       _put_SigmaFP_ShutterSpeed },
 	{ N_("Aperture"),                  	"aperture",		    PTP_DPC_GP_SIGMA_FP_Aperture,           PTP_VENDOR_GP_SIGMAFP, PTP_DTC_UINT64, _get_SigmaFP_Aperture,           _put_SigmaFP_Aperture },
 	{ N_("Metering Mode"),                  "meteringmode",             PTP_DPC_CANON_MeteringMode,             PTP_VENDOR_CANON,   PTP_DTC_UINT8,  _get_Canon_MeteringMode,            _put_Canon_MeteringMode },
