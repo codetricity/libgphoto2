@@ -1,148 +1,148 @@
-# libgphoto2
+# libgphoto2 for RICOH THETA USB API
 
-Hello and welcome to the wonderful world of gphoto! This is libgphoto2, the
-successor of gphoto with lots of new features and additional camera
-drivers.
+## modifications for RICOH THETA
 
-If you miss a feature, would like to report success or failure, or have any
-questions, please don't hesitate to contact our mailing list.
+* shutterspeed works thanks to patch from [hugues](https://community.theta360.guide/u/Hugues)
 
+## more information on libgphoto2
 
-## What is libgphoto2?
-
-libgphoto2 is a library that can be used by applications to access various
-digital cameras.  
-
-For more information on gphoto, see [gphoto project home page].
-
-There, you can also get information on mailing lists, supported cameras,
-and availability of gphoto2. Another source of information is [gphoto github project page].
-
-where you can access our SVN server to fetch the source code of
-gphoto2, gtkam and GnoCam (see below).
+Refer to the original [libgphoto2 README](https://github.com/gphoto/libgphoto2/blob/master/README.md) for more information
 
 
-## What is libgphoto2 not?
 
-libgphoto2 itself is not a GUI application, opposed to gphoto. There are
-GUI frontends for the gphoto2 library, however, such as gtkam for
-example.
+## modification overview
 
-libgphoto2 can only talk to cameras the language of those it understands.
-That is, if you own a camera that speaks a language that isn't published
-anywhere and nobody has been able to figure out the meaning of the sentences,
-libgphoto2 cannot communicate with those cameras.
+`config.c (libgphoto2-2.5.30\camlibs\ptp2)`
 
-Then, there are cameras supporting the so-called USB Mass Storage protocol.
-This is a protocol that has been published and lets you access any storage
-device, be it a camera or a disk connected via USB to your computer. As there
-are already drivers for this protocol out there, you don't need an additional
-library like libgphoto2. The list of camera that use USB Mass Storage is getting
-longer everyday, so we won't publish it.
+```c
+	{ N_("Shutter Speed"), 					"shutterspeed", 			PTP_DPC_RICOH_ShutterSpeed, 			PTP_VENDOR_MICROSOFT, 		PTP_DTC_UINT64, _get_Ricoh_ShutterSpeed, _put_Ricoh_ShutterSpeed },	
+```
 
-For a more up to date list, you can consult [camera list with support status].
+Line was added after this line:
 
-Your operating system will tell you about that because it is likely to recognize
-the device as a SCSI disk that you can mount (for Linux 'dmesg' will tell you).
-Again, those cameras *cannot* be accessed through libgphoto2. Some of them can
-be switched to use a different communication protocol and might be in that case
-useable with libgphoto2.
+```c
+{ N_("Shutter Speed"), "shutterspeed", PTP_DPC_RICOH_ShutterSpeed, PTP_VENDOR_PENTAX, PTP_DTC_UINT64, _get_Ricoh_ShutterSpeed, _put_Ricoh_ShutterSpeed },
+```
 
-Other camera support a protocol called PTP or USB Imaging Devices that has
-been developed by Kodak and other. libgphoto2 does support PTP. Also working
-will be cameras labeled as "PictBridge", which is a extension to PTP.
+## gphoto2 examples
 
-Almost all cameras that are not mass storage support it these days, including
-but not limited to all Nikon, Canon, Fuji, Sony, Panasonic, HP and more.
+### get current shutter speed
 
-PTP camera unknown to libgphoto2 will be detected as a generic PTP camera and
-will work as-is without any changes.
+```text
+gphoto2 --get-config shutterspeed
+Label: Shutter Speed                                                           
+Readonly: 0
+Type: RADIO
+Current: Auto
+Choice: 0 Auto
+END
+```
 
-MTP (Microsoft Transfer Protocol) capable devices will also be accessible,
-since MTP is based on PTP.
+### set exposure program to shutter priority
 
+```
+gphoto2 --set-config=/main/other/500e=4
+```
 
-## Platforms
+### get shutterspeed when camera set to shutter priority
 
-libgphoto2 should compile and run on pretty much all Unix-like platforms.
-libgphoto2 has _not_ (yet?) been ported to any operating system from MicroSoft.
+```
+ gphoto2 --get-config shutterspeed
+Label: Shutter Speed                                                           
+Readonly: 0
+Type: RADIO
+Current: 1/250
+Choice: 0 1/16000
+Choice: 1 1/12800
+Choice: 2 1/10000
+Choice: 3 1/8000
+Choice: 4 1/6400
+Choice: 5 1/5000
+Choice: 6 1/4000
+Choice: 7 1/3200
+Choice: 8 1/2500
+Choice: 9 1/2000
+Choice: 10 1/1600
+Choice: 11 1/1250
+Choice: 12 1/1000
+Choice: 13 1/800
+Choice: 14 1/640
+Choice: 15 1/500
+Choice: 16 1/400
+Choice: 17 1/320
+Choice: 18 1/250
+Choice: 19 1/200
+Choice: 20 1/160
+Choice: 21 1/125
+Choice: 22 1/100
+Choice: 23 1/80
+Choice: 24 1/60
+Choice: 25 1/50
+Choice: 26 1/40
+Choice: 27 1/30
+Choice: 28 1/25
+Choice: 29 1/20
+Choice: 30 1/15
+Choice: 31 1/13
+Choice: 32 1/10
+Choice: 33 1/8
+Choice: 34 1/6
+Choice: 35 1/5
+Choice: 36 1/4
+Choice: 37 1/3
+Choice: 38 10/25
+Choice: 39 1/2
+Choice: 40 10/16
+Choice: 41 10/13
+Choice: 42 1/1
+Choice: 43 13/10
+Choice: 44 16/10
+Choice: 45 2/1
+Choice: 46 25/10
+Choice: 47 32/10
+Choice: 48 4/1
+Choice: 49 5/1
+Choice: 50 6/1
+Choice: 51 8/1
+Choice: 52 10/1
+Choice: 53 13/1
+Choice: 54 15/1
+END
+```
 
+### set shutterspeed to 1/1600
 
-## Bindings
+```
+gphoto2 --set-config-index shutterspeed=10
+```
 
-- Java: [gphoto2-java](https://github.com/mvysny/gphoto2-java), [libgphoto2-jna](https://github.com/angryelectron/libgphoto2-jna)
-- Python: [python-gphoto2](https://github.com/jim-easterbrook/python-gphoto2), [gphoto2-cffi](https://github.com/jbaiter/gphoto2-cffi)
-- C#: [libgphoto2-sharp](https://github.com/gphoto/libgphoto2-sharp)
-- Go: [go-gphoto2](https://github.com/aqiank/go-gphoto2)
-- Rust: [gphoto-rs](https://github.com/dcuddeback/gphoto-rs)
-- Node.js: [node-gphoto2](https://github.com/lwille/node-gphoto2)
-- Ruby: [ffi-gphoto2](https://github.com/zaeleus/ffi-gphoto2)
-- Crystal: [gphoto2.cr](https://github.com/sija/gphoto2.cr)
+### get shutterspeed to verify setting
 
+Current is 1/1600, which is choice 10.
 
-## How to set up libgphoto2
+```
+gphoto2 --get-config shutterspeed
+Label: Shutter Speed                                                           
+Readonly: 0
+Type: RADIO
+Current: 1/1600
 
-For information on how to set up libgphoto2 and its frontends, see
-The gphoto2 Manual.
+```
 
-It is available at the following places:
+### Set Back to Mode 2, Auto
 
- - At the gphoto website: [gphoto project home page]
- - In the SVN module gphoto2-manual
+```
+gphoto2 --set-config=/main/other/500e=2
 
-The gphoto2 Manual includes information about setting up USB
-hotplugging.
+```
 
-If you run into problems, you may also consult the FAQ (also included
-in The gphoto2 Manual).
+### Reconfirm Auto
 
-
-## Frontends
-
-gphoto2 is a command line frontend which is quite powerful,
-especially in combination with scripts. See The gphoto2 Manual
-for a short description.
-
-For the GUI lovers, there are for example digikam (KDE), gthumb (GNOME),
-f-spot (GNOME / Mono) and more. We also have a GTK2 reference GUI
-called gtkam, which is unmaintained, its only special features are
-capture ability.
-Additionally, there are plugins for other programs available like
-kio_camera (KDE - Konqueror) and a fuse plugin, gphotofs.
-
-
-## Reporting Bugs
-
-Every piece of software contains errors and flaws. So does
-libgphoto2. When you encounter something that does not work, please do
-the following:
-
-1. Find out whether this is a known problem.
-
-2. Reproduce the problem with debug output enabled and the language
-    set to English, so that the development team will understand the
-    messages. You can do this by running:
-
-        env LC_ALL=C gtkam
-
-    if you're using the gtkam frontend or running:
-
-        env LC_ALL=C gphoto2 --debug-logfile=logfile.log --debug <options>
-
-    using the gphoto2 command line interface.
-
-3. Report the problem on the mailing list with the corresponding debug
-    output if it is small. If it is more than a few kilobytes, please
-    don't post the complete debug output on the list.
-
-## Links
-
-* [gphoto project home page](http://www.gphoto.org/)
-* [gphoto github project page](https://github.com/gphoto)
-* [gphoto camera list](http://gphoto.org/proj/libgphoto2/support.php)
-* [gphoto camera remote control list and doc](http://gphoto.org/doc/remote/)
-* [jphoto home page](http://jphoto.sourceforge.net/)
-* [Information about using USB mass storage](http://www.linux-usb.org/USB-guide/x498.html)
-* [gphoto development mailing list](mailto:gphoto-devel@lists.sourceforge.net)
-* [gphoto user mailing list](mailto:gphoto-user@lists.sourceforge.net)
-* [gphoto translation mailing list](mailto:gphoto-translation@lists.sourceforge.net)
+```
+gphoto2 --get-config shutterspeed
+Label: Shutter Speed                                                           
+Readonly: 0
+Type: RADIO
+Current: Auto
+Choice: 0 Auto
+```
