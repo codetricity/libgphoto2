@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #ifdef TM_IN_SYS_TIME
 #include <sys/time.h>
@@ -2692,7 +2693,7 @@ canon_int_set_time (Camera *camera, time_t date, GPContext *context)
         time_t new_date;
         struct tm *tm;
 
-        GP_DEBUG ("canon_int_set_time: %i=0x%x %s", (unsigned int) date, (unsigned int) date,
+        GP_DEBUG ("canon_int_set_time: %li=0x%lx %s", (unsigned long) date, (unsigned long) date,
                   asctime (localtime (&date)));
 
         /* call localtime() just to get 'extern long timezone' / tm->tm_gmtoff set.

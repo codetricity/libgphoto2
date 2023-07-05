@@ -33,6 +33,7 @@
 # include <arpa/inet.h>
 #endif
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <gphoto2/gphoto2-library.h>
 #include <gphoto2/gphoto2-port-log.h>
@@ -469,8 +470,8 @@ skip:
 		GP_LOG_D ("EOS M detected");
 
 		C_PTP (ptp_canon_eos_seteventmode(params, 2));
-		ct_val.u16 = 0x0008;
-		C_PTP (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &ct_val, PTP_DTC_UINT16));
+		ct_val.u32 = 0x0008;
+		C_PTP (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &ct_val, PTP_DTC_UINT32));
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 		usleep(1000*1000); /* 1 second */
@@ -566,8 +567,8 @@ camera_unprepare_canon_eos_capture(Camera *camera, GPContext *context) {
 	if (is_canon_eos_m (params)) {
 		PTPPropertyValue    ct_val;
 
-		ct_val.u16 = 0x0000;
-		C_PTP (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &ct_val, PTP_DTC_UINT16));
+		ct_val.u32 = 0x0000;
+		C_PTP (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &ct_val, PTP_DTC_UINT32));
 	}
 
 	/* then emits 911b and 911c ... not done yet ... */
@@ -658,8 +659,8 @@ struct submenu;
 #define CONFIG_GET_ARGS Camera *camera, CameraWidget **widget, struct submenu* menu, PTPDevicePropDesc *dpd
 #define CONFIG_GET_NAMES camera, widget, menu, dpd
 typedef int (*get_func)(CONFIG_GET_ARGS);
-#define CONFIG_PUT_ARGS Camera *camera, CameraWidget *widget, PTPPropertyValue *propval, PTPDevicePropDesc *dpd
-#define CONFIG_PUT_NAMES camera, widget, propval, dpd
+#define CONFIG_PUT_ARGS Camera *camera, CameraWidget *widget, PTPPropertyValue *propval, PTPDevicePropDesc *dpd, int *alreadyset
+#define CONFIG_PUT_NAMES camera, widget, propval, dpd, alreadyset
 typedef int (*put_func)(CONFIG_PUT_ARGS);
 
 struct menu;
@@ -1382,18 +1383,18 @@ fallback:										\
 				}							\
 			}								\
 			GP_LOG_D("posnow %d, value %d", posnow, dpd.CurrentValue.bits);	\
-			\
-			/*
-			 If we made a small +-1 adjustment, check for overshoot.
-			 However, use enum position instead of value itself for comparisons as enums
-			 are not always sorted (e.g. Auto ISO has higher numerical value but comes earlier).
-		    */ \
+											\
+			/*								\
+			 If we made a small +-1 adjustment, check for overshoot.	\
+			 However, use enum position instead of value itself for comparisons as enums		\
+			 are not always sorted (e.g. Auto ISO has higher numerical value but comes earlier).	\
+		    */ 									\
 			overshoot = ((propval.u8 == 0x01) && (posnow > posnew)) || ((propval.u8 == 0xff) && (posnow < posnew)); \
 		} else { 								\
 			overshoot = ((propval.u8 == 0x01) && (dpd.CurrentValue.bits > value)) || ((propval.u8 == 0xff) && (dpd.CurrentValue.bits < value)); \
-		} \
-		\
-		if (overshoot) {		\
+		} 									\
+											\
+		if (overshoot) {							\
 			GP_LOG_D ("We overshooted value, maybe not exact match possible. Break!");	\
 			break;								\
 		}									\
@@ -1407,7 +1408,7 @@ fallback:										\
 			break;								\
 		}									\
 		/* We did not get there. Did we hit 0? */				\
-		if (useenumorder) {		\
+		if (useenumorder) {							\
 			if (posnow == -1) {						\
 				GP_LOG_D ("Now value is not in enumeration, falling back to ordered tries.");\
 				useenumorder = 0;					\
@@ -1635,6 +1636,7 @@ _put_Sony_ExpCompensation(CONFIG_PUT_ARGS) {
 
 	ret = _put_ExpCompensation(CONFIG_PUT_NAMES);
 	if (ret != GP_OK) return ret;
+	*alreadyset = 1;
 	return _put_sony_value_i16 (&camera->pl->params, dpd->DevicePropertyCode, propval->i16, 0);
 }
 
@@ -1645,6 +1647,7 @@ _put_Sony_ExpCompensation2(CONFIG_PUT_ARGS) {
 
 	ret = _put_ExpCompensation(CONFIG_PUT_NAMES);
 	if (ret != GP_OK) return ret;
+	*alreadyset = 1;
 	return translate_ptp_result (ptp_sony_setdevicecontrolvaluea (&camera->pl->params, dpd->DevicePropertyCode, propval, PTP_DTC_INT16));
 }
 
@@ -1795,6 +1798,7 @@ _put_Sony_Zoom(CONFIG_PUT_ARGS)
 
 	CR (gp_widget_get_value(widget, &f));
 	propval->u32 = (uint32_t)f*1000000;
+	*alreadyset = 1;
 	return _put_sony_value_u32(params, PTP_DPC_SONY_Zoom, propval->u32, 0);
 }
 
@@ -2193,29 +2197,29 @@ _get_Canon_LiveViewSize(CONFIG_GET_ARGS) {
 	gp_widget_set_name (*widget, menu->name);
 
 	for (i=0;i<dpd->FORM.Enum.NumberOfValues;i++) {
-		if ((dpd->FORM.Enum.SupportedValue[i].u16 & 0xe) == 0x2) {
+		if ((dpd->FORM.Enum.SupportedValue[i].u32 & 0xe) == 0x2) {
 			if (!(have & 0x2))
 				gp_widget_add_choice (*widget, _("Large"));
 			have |= 0x2;
 			continue;
 		}
-		if ((dpd->FORM.Enum.SupportedValue[i].u16 & 0xe) == 0x4) {
+		if ((dpd->FORM.Enum.SupportedValue[i].u32 & 0xe) == 0x4) {
 			if (!(have & 0x4))
 				gp_widget_add_choice (*widget, _("Medium"));
 			have |= 0x4;
 			continue;
 		}
-		if ((dpd->FORM.Enum.SupportedValue[i].u16 & 0xe) == 0x8) {
+		if ((dpd->FORM.Enum.SupportedValue[i].u32 & 0xe) == 0x8) {
 			if (!(have & 0x8))
 				gp_widget_add_choice (*widget, _("Small"));
 			have |= 0x8;
 			continue;
 		}
 	}
-	if ((dpd->CurrentValue.u16 & 0xe) == 0x8) { gp_widget_set_value (*widget, _("Small")); return GP_OK; }
-	if ((dpd->CurrentValue.u16 & 0xe) == 0x4) { gp_widget_set_value (*widget, _("Medium")); return GP_OK; }
-	if ((dpd->CurrentValue.u16 & 0xe) == 0x2) { gp_widget_set_value (*widget, _("Large")); return GP_OK; }
-	sprintf(buf,"val %x", dpd->CurrentValue.u16);
+	if ((dpd->CurrentValue.u32 & 0xe) == 0x8) { gp_widget_set_value (*widget, _("Small")); return GP_OK; }
+	if ((dpd->CurrentValue.u32 & 0xe) == 0x4) { gp_widget_set_value (*widget, _("Medium")); return GP_OK; }
+	if ((dpd->CurrentValue.u32 & 0xe) == 0x2) { gp_widget_set_value (*widget, _("Large")); return GP_OK; }
+	sprintf(buf,"val %x", dpd->CurrentValue.u32);
 	gp_widget_set_value (*widget, buf);
 	return GP_OK;
 }
@@ -2233,7 +2237,7 @@ _put_Canon_LiveViewSize(CONFIG_PUT_ARGS) {
 	if (outputval == 0)
 		return GP_ERROR_BAD_PARAMETERS;
 	/* replace the current outputsize, but keep the TFT flag */
-	propval->u16 = (dpd->CurrentValue.u16 & ~0xe) | outputval;
+	propval->u32 = (dpd->CurrentValue.u32 & ~0xe) | outputval;
 	return GP_OK;
 }
 
@@ -2505,14 +2509,14 @@ static struct deviceproptableu8 sony_aspectratio[] = {
 GENERIC8TABLE(Sony_AspectRatio,sony_aspectratio)
 
 /* values are from 6D */
-static struct deviceproptableu16 canon_eos_aspectratio[] = {
+static struct deviceproptableu32 canon_eos_aspectratio[] = {
 	{ "3:2",	0x0000, 0},
 	{ "1:1",	0x0001, 0},
 	{ "4:3",	0x0002, 0},
 	{ "16:9",	0x0007, 0},
 	{ "1.6x",	0x000d, 0}, /* guess , EOS R */
 };
-GENERIC16TABLE(Canon_EOS_AspectRatio,canon_eos_aspectratio)
+GENERIC32TABLE(Canon_EOS_AspectRatio,canon_eos_aspectratio)
 
 /* actually in 1/10s of a second, but only 3 values in use */
 static struct deviceproptableu16 canon_selftimer[] = {
@@ -2523,7 +2527,7 @@ static struct deviceproptableu16 canon_selftimer[] = {
 GENERIC16TABLE(Canon_SelfTimer,canon_selftimer)
 
 /* actually it is a flag value, 1 = TFT, 2 = PC, 4 = MOBILE, 8 = MOBILE2 */
-static struct deviceproptableu16 canon_eos_cameraoutput[] = {
+static struct deviceproptableu32 canon_eos_cameraoutput[] = {
 	{ N_("Off"),		0, 0 }, /*On 5DM3, LCD/TFT is off, mirror down and optical view finder enabled */
 	{ N_("TFT"),		1, 0 },
 	{ N_("PC"), 		2, 0 },
@@ -2537,7 +2541,22 @@ static struct deviceproptableu16 canon_eos_cameraoutput[] = {
 	{ N_("PC + MOBILE2"),	10, 0 },
 	{ N_("TFT + PC + MOBILE2"), 11, 0 },
 };
-GENERIC16TABLE(Canon_EOS_CameraOutput,canon_eos_cameraoutput)
+GENERIC32TABLE(Canon_EOS_CameraOutput,canon_eos_cameraoutput)
+
+static struct deviceproptableu32 canon_eos_afmethod[] = {
+	{ N_("Quick"),			0, 0 },
+	{ N_("Live"),			1, 0 },
+	{ N_("LiveFace"), 		2, 0 },
+	{ N_("LiveMulti"), 		3, 0 },
+	{ N_("LiveZone"),		4, 0 },
+	{ N_("LiveSingleExpandCross"),	5, 0 },
+	{ N_("LiveSingleExpandSurround"),	6, 0 },
+	{ N_("LiveZoneLargeH"), 	7, 0 },
+	{ N_("LiveZoneLargeV"),		8, 0 },
+	{ N_("LiveCatchAF"),		9, 0 },
+	{ N_("LiveSpotAF"),		10, 0 },
+};
+GENERIC32TABLE(Canon_EOS_AFMethod,canon_eos_afmethod)
 
 static struct deviceproptableu16 canon_eos_evfrecordtarget[] = {
 	{ N_("None"),		0, 0 },
@@ -2677,6 +2696,7 @@ static struct deviceproptableu16 canon_isospeed[] = {
 	{ "409600",		0x00a8, 0 },
 	{ "819200",		0x00b0, 0 },
 	{ N_("Auto"),		0x0000, 0 },
+	{ N_("Auto ISO"),	0x0001, 0 },
 };
 GENERIC16TABLE(Canon_ISO,canon_isospeed)
 
@@ -3101,6 +3121,7 @@ _put_Sony_ISO(CONFIG_PUT_ARGS)
 	CR (_parse_Sony_ISO(value, &raw_iso));
 
 	propval->u32 = raw_iso;
+	*alreadyset = 1;
 
 	return _put_sony_value_u32(params, dpd->DevicePropertyCode, raw_iso, 1);
 }
@@ -3118,6 +3139,7 @@ _put_Sony_ISO2(CONFIG_PUT_ARGS)
 
 	propval->u32 = raw_iso;
 
+	*alreadyset = 1;
 	return translate_ptp_result (ptp_sony_setdevicecontrolvaluea(params, dpd->DevicePropertyCode, propval, PTP_DTC_UINT32));
 }
 
@@ -3437,6 +3459,7 @@ _put_Sony_FNumber(CONFIG_PUT_ARGS)
 		propval->u16 = fvalue*100;
 	else
 		return GP_ERROR;
+	*alreadyset = 1;
 	return _put_sony_value_u16 (params, PTP_DPC_FNumber, fvalue*100, 0);
 }
 
@@ -5291,11 +5314,24 @@ _put_Sony_ShutterSpeed(CONFIG_PUT_ARGS) {
 				break;
 		}
 
-		// Calculating jump width
-		if (direction > 0)
-			value.u8 = 0x00 + position_new - position_current;
-		else
-			value.u8 = 0x100 + position_new - position_current;
+		/* If something failed, fall back to single step, https://github.com/gphoto/libgphoto2/issues/694 */
+		if (position_current == position_new) {
+			GP_LOG_D ("posNew and pos_current both %d, fall back to single step", position_current);
+			if (old > new) {
+				value.u8 = 0x01;
+				direction = 1;
+			}
+			else {
+				value.u8 = 0xff;
+				direction = -1;
+			}
+		} else {
+			// Calculating jump width
+			if (direction > 0)
+				value.u8 = 0x00 + position_new - position_current;
+			else
+				value.u8 = 0x100 + position_new - position_current;
+		}
 
 		a = dpd->CurrentValue.u32>>16;
 		b = dpd->CurrentValue.u32&0xffff;
@@ -5354,6 +5390,7 @@ _put_Sony_ShutterSpeed(CONFIG_PUT_ARGS) {
 			break;
 		}
 	} while (1);
+	*alreadyset = 1;
 	propval->u32 = new;
 	return GP_OK;
 }
@@ -5883,17 +5920,18 @@ _put_Sony_FocusMode(CONFIG_PUT_ARGS) {
 			break;
 		}
 	}
+	*alreadyset = 1;
 	return GP_OK;
 }
 
 
-static struct deviceproptableu16 eos_focusmodes[] = {
+static struct deviceproptableu32 eos_focusmodes[] = {
 	{ N_("One Shot"),	0x0000, 0 },
 	{ N_("AI Servo"),	0x0001, 0 },
 	{ N_("AI Focus"),	0x0002, 0 },
 	{ N_("Manual"),		0x0003, 0 },
 };
-GENERIC16TABLE(Canon_EOS_FocusMode,eos_focusmodes)
+GENERIC32TABLE(Canon_EOS_FocusMode,eos_focusmodes)
 
 static struct deviceproptableu16 eos_quickreviewtime[] = {
 	{ N_("None"),		0x0000, 0 },
@@ -6050,6 +6088,7 @@ GENERIC16TABLE(Canon_BracketMode,canon_bracketmode)
 static struct deviceproptableu16 canon_aperture[] = {
 	{ N_("implicit auto"),	0x0, 0 },
 	{ N_("auto"),	0xffff, 0 },
+	{ N_("auto"),	0x00b0, 0 },
 	{ "1",		0x0008, 0 },
 	{ "1.1",	0x000b, 0 },
 	{ "1.2",	0x000c, 0 },
@@ -6840,6 +6879,7 @@ _put_Sony_CompressionSetting(CONFIG_PUT_ARGS) {
 			break;
 		}
 	}
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8073,11 +8113,11 @@ _put_Canon_EOS_ViewFinder(CONFIG_PUT_ARGS) {
 		}
 	}
 	if (val)
-		xval.u16 = 2;
+		xval.u32 = 2;
 	else
-		xval.u16 = 0;
-	C_PTP_MSG (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &xval, PTP_DTC_UINT16),
-		   "ptp2_eos_viewfinder enable: failed to set evf outputmode to %d", xval.u16);
+		xval.u32 = 0;
+	C_PTP_MSG (ptp_canon_eos_setdevicepropvalue (params, PTP_DPC_CANON_EOS_EVFOutputDevice, &xval, PTP_DTC_UINT32),
+		   "ptp2_eos_viewfinder enable: failed to set evf outputmode to %d", xval.u32);
         return GP_OK;
 }
 
@@ -8362,6 +8402,7 @@ _put_Sony_Movie(CONFIG_PUT_ARGS)
 	else
 		value.u16 = 1;
         C_PTP_REP (ptp_sony_setdevicecontrolvalueb (params, 0xD2C8, &value, PTP_DTC_UINT16 ));
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8390,6 +8431,7 @@ _put_Sony_QX_Movie(CONFIG_PUT_ARGS)
 	else
 		value.u16 = 1;
         C_PTP_REP (ptp_sony_qx_setdevicecontrolvalueb (params, PTP_DPC_SONY_QX_Movie_Rec, &value, PTP_DTC_UINT16 ));
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8681,7 +8723,7 @@ _put_Sony_Autofocus(CONFIG_PUT_ARGS)
 	xpropval.u16 = val ? 2 : 1;
 
 	C_PTP (ptp_sony_setdevicecontrolvalueb (params, PTP_DPC_SONY_AutoFocus, &xpropval, PTP_DTC_UINT16));
-
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8711,27 +8753,27 @@ _put_Sony_ManualFocus(CONFIG_PUT_ARGS)
 		xpropval.u16 = 2;
 		C_PTP (ptp_sony_setdevicecontrolvalueb (params, 0xd2d2, &xpropval, PTP_DTC_UINT16));
 		*/
-		if(val <= -7) xpropval.u16 = 0xFFFF - 6;
-		else if(val <= -6.0) xpropval.u16 = 0xFFFF - 5;
-		else if(val <= -5.0) xpropval.u16 = 0xFFFF - 4;
-		else if(val <= -4.0) xpropval.u16 = 0xFFFF - 3;
-		else if(val <= -3.0) xpropval.u16 = 0xFFFF - 2;
-		else if(val <= -2.0) xpropval.u16 = 0xFFFF - 1;
-		else if(val <= -1.0) xpropval.u16 = 0xFFFF;
-		else if(val <= 1.0) xpropval.u16 = 1;
-		else if(val <= 2.0) xpropval.u16 = 2;
-		else if(val <= 3.0) xpropval.u16 = 3;
-		else if(val <= 4.0) xpropval.u16 = 4;
-		else if(val <= 5.0) xpropval.u16 = 5;
-		else if(val <= 6.0) xpropval.u16 = 6;
-		else if(val <= 7.0) xpropval.u16 = 7;
-		else xpropval.u16 = 0;
-		C_PTP (ptp_sony_setdevicecontrolvalueb (params, PTP_DPC_SONY_NearFar, &xpropval, PTP_DTC_UINT16));
+		if(val <= -7) xpropval.i16 = - 7;
+		else if(val <= -6.0) xpropval.i16 = -6;
+		else if(val <= -5.0) xpropval.i16 = -5;
+		else if(val <= -4.0) xpropval.i16 = -4;
+		else if(val <= -3.0) xpropval.i16 = -3;
+		else if(val <= -2.0) xpropval.i16 = -2;
+		else if(val <= -1.0) xpropval.i16 = -1;
+		else if(val <= 1.0) xpropval.i16 = 1;
+		else if(val <= 2.0) xpropval.i16 = 2;
+		else if(val <= 3.0) xpropval.i16 = 3;
+		else if(val <= 4.0) xpropval.i16 = 4;
+		else if(val <= 5.0) xpropval.i16 = 5;
+		else if(val <= 6.0) xpropval.i16 = 6;
+		else if(val <= 7.0) xpropval.i16 = 7;
+		else xpropval.i16 = 0;
+		C_PTP (ptp_sony_setdevicecontrolvalueb (params, PTP_DPC_SONY_NearFar, &xpropval, PTP_DTC_INT16));
 	} else {
 		xpropval.u16 = 1;
 		C_PTP (ptp_sony_setdevicecontrolvalueb (params, 0xd2d2, &xpropval, PTP_DTC_UINT16));
 	}
-
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8757,7 +8799,7 @@ _put_Sony_Capture(CONFIG_PUT_ARGS)
 	xpropval.u16 = val ? 2 : 1;
 
 	C_PTP (ptp_sony_setdevicecontrolvalueb (params, PTP_DPC_SONY_Capture, &xpropval, PTP_DTC_UINT16));
-
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -8793,6 +8835,33 @@ _put_Sony_Bulb(CONFIG_PUT_ARGS)
 		xpropval.u16 = 1;
 		C_PTP (ptp_sony_setdevicecontrolvalueb (params, PTP_DPC_SONY_AutoFocus, &xpropval, PTP_DTC_UINT16));
 	}
+	*alreadyset = 1;
+	return GP_OK;
+}
+
+static int
+_get_Sony_FocusMagnifyProp(CONFIG_GET_ARGS) {
+	int val;
+
+	gp_widget_new (GP_WIDGET_TOGGLE, _(menu->label), widget);
+	gp_widget_set_name (*widget,menu->name);
+	val = 2; /* always changed */
+	gp_widget_set_value  (*widget, &val);
+	return GP_OK;
+}
+
+static int
+_put_Sony_FocusMagnifyProp(CONFIG_PUT_ARGS)
+{
+	PTPParams *params = &(camera->pl->params);
+	int val;
+	PTPPropertyValue xpropval;
+
+	CR (gp_widget_get_value(widget, &val));
+	xpropval.u16 = val ? 2 : 1;
+
+	C_PTP (ptp_sony_setdevicecontrolvalueb (params, dpd->DevicePropertyCode, &xpropval, PTP_DTC_UINT16));
+	*alreadyset = 1;
 	return GP_OK;
 }
 
@@ -9149,17 +9218,19 @@ _put_Panasonic_AFMode(CONFIG_PUT_ARGS)
 {
     PTPParams *params = &(camera->pl->params);
     char *xval;
-    uint32_t val;
-    uint32_t i;
+    uint32_t val = 0;
+    uint32_t i, found;
 
     CR (gp_widget_get_value(widget, &xval));
 
     for (i=0;i<sizeof(panasonic_aftable)/sizeof(panasonic_aftable[0]);i++) {
         if (!strcmp(panasonic_aftable[i].str, xval)) {
             val = panasonic_aftable[i].val;
+	    found = 1;
             break;
         }
     }
+    if (!found) return GP_ERROR;
 
     return translate_ptp_result (ptp_panasonic_setdeviceproperty(params, PTP_DPC_PANASONIC_AFArea_AFModeParam, (unsigned char*)&val, 2));
 }
@@ -10386,7 +10457,7 @@ _put_nikon_create_wifi_profile (CONFIG_PUT_ARGS)
 
 	        gp_widget_set_changed (subwidget, FALSE);
 
-		ret = cursub->putfunc (camera, subwidget, NULL, NULL);
+		ret = cursub->putfunc (camera, subwidget, NULL, NULL, NULL);
 	}
 
 	return GP_OK;
@@ -10440,7 +10511,7 @@ _put_wifi_profiles_menu (CONFIG_MENU_PUT_ARGS)
 		if (ret != GP_OK)
 			continue;
 
-		ret = cursub->putfunc (camera, subwidget, NULL, NULL);
+		ret = cursub->putfunc (camera, subwidget, NULL, NULL, NULL);
 	}
 
 	return GP_OK;
@@ -10504,7 +10575,7 @@ static struct submenu camera_actions_menu[] = {
 	{ N_("Synchronize camera date and time with PC"),"syncdatetime", PTP_DPC_CANON_EOS_CameraTime, PTP_VENDOR_CANON, PTP_DTC_UINT32, _get_Canon_SyncTime, _put_Canon_SyncTime },
 
 	{ N_("Auto-Focus"),                     "autofocus",        PTP_DPC_SONY_AutoFocus, PTP_VENDOR_SONY,   PTP_DTC_UINT16,  _get_Sony_Autofocus,            _put_Sony_Autofocus },
-	{ N_("Manual-Focus"),                   "manualfocus",      PTP_DPC_SONY_NearFar,   PTP_VENDOR_SONY,   PTP_DTC_UINT16,  _get_Sony_ManualFocus,          _put_Sony_ManualFocus },
+	{ N_("Manual-Focus"),                   "manualfocus",      PTP_DPC_SONY_NearFar,   PTP_VENDOR_SONY,   PTP_DTC_INT16,   _get_Sony_ManualFocus,          _put_Sony_ManualFocus },
 	{ N_("Capture"),                        "capture",          PTP_DPC_SONY_Capture,   PTP_VENDOR_SONY,   PTP_DTC_UINT16,  _get_Sony_Capture,              _put_Sony_Capture },
 	{ N_("Power Down"),                     "powerdown",        0,  0,                  PTP_OC_PowerDown,                   _get_PowerDown,                 _put_PowerDown },
 	{ N_("Focus Lock"),                     "focuslock",        0,  PTP_VENDOR_CANON,   PTP_OC_CANON_FocusLock,             _get_Canon_FocusLock,           _put_Canon_FocusLock },
@@ -10538,6 +10609,12 @@ static struct submenu camera_actions_menu[] = {
 	{ N_("Movie Capture"),                  "movie",            0,  PTP_VENDOR_SONY,    PTP_OC_SONY_QX_Connect,             _get_Sony_QX_Movie,             _put_Sony_QX_Movie },
 	{ N_("Movie Capture"),                  "movie",            0,  PTP_VENDOR_PANASONIC,PTP_OC_PANASONIC_MovieRecControl,  _get_Panasonic_Movie,           _put_Panasonic_Movie },
 	{ N_("Movie Mode"),                     "eosmoviemode",     0,  PTP_VENDOR_CANON,   0,                                  _get_Canon_EOS_MovieModeSw,     _put_Canon_EOS_MovieModeSw },
+	{ N_("Focus Magnify"),                  "focusmagnify",     PTP_DPC_SONY_FocusMagnify, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp,     _put_Sony_FocusMagnifyProp },
+	{ N_("Focus Magnify Exit"),             "focusmagnifyexit", PTP_DPC_SONY_FocusMagnifyExit, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp, _put_Sony_FocusMagnifyProp },
+	{ N_("Focus Magnify Up"),               "focusmagnifyup",   PTP_DPC_SONY_FocusMagnifyUp, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp,   _put_Sony_FocusMagnifyProp },
+	{ N_("Focus Magnify Down"),             "focusmagnifydown", PTP_DPC_SONY_FocusMagnifyDown, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp, _put_Sony_FocusMagnifyProp },
+	{ N_("Focus Magnify Left"),             "focusmagnifyleft", PTP_DPC_SONY_FocusMagnifyLeft, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp, _put_Sony_FocusMagnifyProp },
+	{ N_("Focus Magnify Right"),            "focusmagnifyright",PTP_DPC_SONY_FocusMagnifyRight, PTP_VENDOR_SONY, PTP_DTC_UINT16, _get_Sony_FocusMagnifyProp,_put_Sony_FocusMagnifyProp },
 	{ N_("PTP Opcode"),                     "opcode",           0,  0,                  PTP_OC_GetDeviceInfo,               _get_Generic_OPCode,            _put_Generic_OPCode },
 	{ 0,0,0,0,0,0,0 },
 };
@@ -10560,6 +10637,9 @@ static struct submenu camera_status_menu[] = {
 	{ N_("Battery Level"),          "batterylevel",     PTP_DPC_CANON_EOS_BatteryPower,         PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_EOS_BatteryLevel,    _put_None },
 	{ N_("Battery Level"),          "batterylevel",     PTP_DPC_SONY_BatteryLevel,              PTP_VENDOR_SONY,    PTP_DTC_INT8,   _get_SONY_BatteryLevel,         _put_None },
 	{ N_("Mirror Up Status"),       "mirrorupstatus",   PTP_DPC_NIKON_MirrorUpStatus,           PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,		_put_None },
+	{ N_("Mirror Lock"),       	"mirrorlock",       PTP_DPC_CANON_EOS_MirrorUpSetting,      PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_INT,			_put_INT },
+	{ N_("Mirror Lock Status"),     "mirrorlockstatus", PTP_DPC_CANON_EOS_MirrorLockupState,    PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_INT,			_put_None },
+	{ N_("Mirror Down Status"),     "mirrordownstatus", PTP_DPC_CANON_EOS_MirrorDownStatus,     PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_INT,			_put_None },
 	{ N_("Mirror Up Shooting Count"),"mirrorupshootingcount", PTP_DPC_NIKON_MirrorUpReleaseShootingCount, PTP_VENDOR_NIKON, PTP_DTC_UINT8,  _get_INT,		_put_None },
 	{ N_("Continuous Shooting Count"),"continousshootingcount", PTP_DPC_NIKON_ContinousShootingCount, PTP_VENDOR_NIKON, PTP_DTC_UINT8,_get_INT,			_put_None },
 	{ N_("Camera Orientation"),     "orientation",      PTP_DPC_NIKON_CameraOrientation,        PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_CameraOrientation,   _put_None },
@@ -10610,7 +10690,7 @@ static struct submenu camera_settings_menu[] = {
 	{ N_("CSM Menu"),               "csmmenu",              PTP_DPC_NIKON_CSMMenu,              PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,         _put_Nikon_OnOff_UINT8 },
 	{ N_("Reverse Command Dial"),   "reversedial",          PTP_DPC_NIKON_ReverseCommandDial,   PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,         _put_Nikon_OnOff_UINT8 },
 	{ N_("Camera Output"),          "output",               PTP_DPC_CANON_CameraOutput,         PTP_VENDOR_CANON,   PTP_DTC_UINT8,  _get_Canon_CameraOutput,        _put_Canon_CameraOutput },
-	{ N_("Camera Output"),          "output",               PTP_DPC_CANON_EOS_EVFOutputDevice,  PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_EOS_CameraOutput,    _put_Canon_EOS_CameraOutput },
+	{ N_("Camera Output"),          "output",               PTP_DPC_CANON_EOS_EVFOutputDevice,  PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_Canon_EOS_CameraOutput,    _put_Canon_EOS_CameraOutput },
 	{ N_("Recording Destination"),  "movierecordtarget",    PTP_DPC_CANON_EOS_EVFRecordStatus,  PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_EOS_EVFRecordTarget, _put_Canon_EOS_EVFRecordTarget },
 	{ N_("EVF Mode"),               "evfmode",              PTP_DPC_CANON_EOS_EVFMode,          PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_EOS_EVFMode,         _put_Canon_EOS_EVFMode },
 	{ N_("Owner Name"),             "ownername",            PTP_DPC_CANON_CameraOwner,          PTP_VENDOR_CANON,   PTP_DTC_AUINT8, _get_AUINT8_as_CHAR_ARRAY,      _put_AUINT8_as_CHAR_ARRAY },
@@ -10782,7 +10862,7 @@ static struct submenu capture_settings_menu[] = {
 	{ N_("Focus Mode"),                     "focusmode",                PTP_DPC_OLYMPUS_FocusMode,              PTP_VENDOR_GP_OLYMPUS_OMD,  PTP_DTC_UINT16, _get_FocusMode,             _put_FocusMode },
 	/* Nikon DSLR have both PTP focus mode and Nikon specific focus mode */
 	{ N_("Focus Mode 2"),                   "focusmode2",               PTP_DPC_NIKON_AutofocusMode,            PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_AFMode,                  _put_Nikon_AFMode },
-	{ N_("Focus Mode"),                     "focusmode",                PTP_DPC_CANON_EOS_FocusMode,            PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_EOS_FocusMode,           _put_Canon_EOS_FocusMode },
+	{ N_("Focus Mode"),                     "focusmode",                PTP_DPC_CANON_EOS_FocusMode,            PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_Canon_EOS_FocusMode,           _put_Canon_EOS_FocusMode },
 	{ N_("Continuous AF"),                  "continuousaf",             PTP_DPC_CANON_EOS_ContinousAFMode,      PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_Canon_EOS_ContinousAF,         _put_Canon_EOS_ContinousAF },
 	{ N_("Effect Mode"),                    "effectmode",               PTP_DPC_EffectMode,                     0,                  PTP_DTC_UINT16, _get_EffectMode,                    _put_EffectMode },
 	{ N_("Effect Mode"),                    "effectmode",               PTP_DPC_NIKON_EffectMode,               PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_NIKON_EffectMode,              _put_NIKON_EffectMode },
@@ -10793,6 +10873,7 @@ static struct submenu capture_settings_menu[] = {
 	{ N_("Aspect Ratio"),                   "aspectratio",              PTP_DPC_SONY_AspectRatio,               PTP_VENDOR_SONY,    PTP_DTC_UINT8,  _get_Sony_AspectRatio,              _put_Sony_AspectRatio },
 	{ N_("Aspect Ratio"),                   "aspectratio",              PTP_DPC_OLYMPUS_AspectRatio,            PTP_VENDOR_GP_OLYMPUS_OMD, PTP_DTC_UINT32,  _get_Olympus_AspectRatio,   _put_Olympus_AspectRatio },
 	{ N_("Aspect Ratio"),                   "aspectratio",              PTP_DPC_CANON_EOS_MultiAspect,          PTP_VENDOR_CANON,   PTP_DTC_UINT32,  _get_Canon_EOS_AspectRatio,        _put_Canon_EOS_AspectRatio },
+	{ N_("AF Method"),	        	"afmethod",		    PTP_DPC_CANON_EOS_LvAfSystem,	    PTP_VENDOR_CANON,   PTP_DTC_UINT32,  _get_Canon_EOS_AFMethod,     _put_Canon_EOS_AFMethod },
 	{ N_("Storage Device"),                 "storageid",                PTP_DPC_CANON_EOS_CurrentStorage,       PTP_VENDOR_CANON,   PTP_DTC_UINT32,  _get_Canon_EOS_StorageID  ,        _put_Canon_EOS_StorageID },
 	{ N_("High ISO Noise Reduction"),       "highisonr",		    PTP_DPC_CANON_EOS_HighISOSettingNoiseReduction, PTP_VENDOR_CANON, PTP_DTC_UINT16, _get_Canon_EOS_HighIsoNr,     _put_Canon_EOS_HighIsoNr },
 	{ N_("HDR Mode"),                       "hdrmode",                  PTP_DPC_NIKON_HDRMode,                  PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,             _put_Nikon_OnOff_UINT8 },
@@ -10853,7 +10934,7 @@ static struct submenu capture_settings_menu[] = {
 	{ N_("Live View White Balance"),        "liveviewwhitebalance",     PTP_DPC_NIKON_LiveViewWhiteBalance,     PTP_VENDOR_NIKON,   PTP_DTC_UINT16, _get_WhiteBalance,                  _put_WhiteBalance },
 	{ N_("Live View Size"),                 "liveviewsize",             PTP_DPC_FUJI_LiveViewImageSize,         PTP_VENDOR_FUJI,    PTP_DTC_UINT16, _get_Fuji_LiveViewSize,             _put_Fuji_LiveViewSize },
 	{ N_("Live View Size"),                 "liveviewsize",             PTP_DPC_SONY_QX_LiveviewResolution,     PTP_VENDOR_SONY,    PTP_DTC_UINT8,  _get_Sony_QX_LiveViewSize,          _put_Sony_QX_LiveViewSize },
-	{ N_("Live View Size"),                 "liveviewsize",             PTP_DPC_CANON_EOS_EVFOutputDevice,      PTP_VENDOR_CANON,   PTP_DTC_UINT16, _get_Canon_LiveViewSize,            _put_Canon_LiveViewSize },
+	{ N_("Live View Size"),                 "liveviewsize",             PTP_DPC_CANON_EOS_EVFOutputDevice,      PTP_VENDOR_CANON,   PTP_DTC_UINT32, _get_Canon_LiveViewSize,            _put_Canon_LiveViewSize },
 	{ N_("Live View Setting Effect"),       "liveviewsettingeffect",    PTP_DPC_SONY_LiveViewSettingEffect,     PTP_VENDOR_SONY,    PTP_DTC_UINT8,  _get_Sony_LiveViewSettingEffect,    _put_Sony_LiveViewSettingEffect },
 	{ N_("File Number Sequencing"),         "filenrsequencing",         PTP_DPC_NIKON_FileNumberSequence,       PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,             _put_Nikon_OnOff_UINT8 },
 	{ N_("Flash Sign"),                     "flashsign",                PTP_DPC_NIKON_FlashSign,                PTP_VENDOR_NIKON,   PTP_DTC_UINT8,  _get_Nikon_OnOff_UINT8,             _put_Nikon_OnOff_UINT8 },
@@ -11661,6 +11742,7 @@ _set_config (Camera *camera, const char *confname, CameraWidget *window, GPConte
 		/* Standard menu with submenus */
 		for (submenuno = 0; menus[menuno].submenus[submenuno].label ; submenuno++ ) {
 			struct submenu *cursub = menus[menuno].submenus+submenuno;
+			int alreadyset = 0;
 
 			ret = GP_OK;
 			if (mode == MODE_SET) {
@@ -11703,24 +11785,26 @@ _set_config (Camera *camera, const char *confname, CameraWidget *window, GPConte
 						/* FIXME: continue to search here perhaps instead of below? */
 					}
 					if (dpd.GetSet == PTP_DPGS_GetSet) {
-						ret = cursub->putfunc (camera, widget, &propval, &dpd);
+						ret = cursub->putfunc (camera, widget, &propval, &dpd, &alreadyset);
 					} else {
 						gp_context_error (context, _("Sorry, the property '%s' / 0x%04x is currently read-only."), _(cursub->label), cursub->propid);
 						ret = GP_ERROR_NOT_SUPPORTED;
 					}
 					if (ret == GP_OK) {
-						ret_ptp = LOG_ON_PTP_E (ptp_generic_setdevicepropvalue (params, cursub->propid, &propval, cursub->type));
-						if (ret_ptp != PTP_RC_OK) {
-							gp_context_error (context, _("The property '%s' / 0x%04x was not set (0x%04x: %s)"),
-									  _(cursub->label), cursub->propid, ret_ptp, _(ptp_strerror(ret_ptp, params->deviceinfo.VendorExtensionID)));
-							ret = translate_ptp_result (ret_ptp);
+						if (!alreadyset) {
+							ret_ptp = LOG_ON_PTP_E (ptp_generic_setdevicepropvalue (params, cursub->propid, &propval, cursub->type));
+							if (ret_ptp != PTP_RC_OK) {
+								gp_context_error (context, _("The property '%s' / 0x%04x was not set (0x%04x: %s)"),
+										  _(cursub->label), cursub->propid, ret_ptp, _(ptp_strerror(ret_ptp, params->deviceinfo.VendorExtensionID)));
+								ret = translate_ptp_result (ret_ptp);
+							}
 						}
 						ptp_free_devicepropvalue (cursub->type, &propval);
 					}
 					ptp_free_devicepropdesc(&dpd);
 					if (ret != GP_OK) continue; /* see if we have another match */
 				} else {
-					ret = cursub->putfunc (camera, widget, NULL, NULL);
+					ret = cursub->putfunc (camera, widget, NULL, NULL, NULL);
 				}
 				if (mode == MODE_SINGLE_SET)
 					return ret;
@@ -11736,13 +11820,15 @@ _set_config (Camera *camera, const char *confname, CameraWidget *window, GPConte
 					GP_LOG_D ("Setting property '%s' / 0x%04x", cursub->label, cursub->propid);
 					memset(&dpd,0,sizeof(dpd));
 					ptp_canon_eos_getdevicepropdesc (params,cursub->propid, &dpd);
-					ret = cursub->putfunc (camera, widget, &propval, &dpd);
+					ret = cursub->putfunc (camera, widget, &propval, &dpd, &alreadyset);
 					if (ret == GP_OK) {
-						ret_ptp = LOG_ON_PTP_E (ptp_canon_eos_setdevicepropvalue (params, cursub->propid, &propval, cursub->type));
-						if (ret_ptp != PTP_RC_OK) {
-							gp_context_error (context, _("The property '%s' / 0x%04x was not set (0x%04x: %s)."),
-									  _(cursub->label), cursub->propid, ret_ptp, _(ptp_strerror(ret_ptp, params->deviceinfo.VendorExtensionID)));
-							ret = translate_ptp_result (ret_ptp);
+						if (!alreadyset) {
+							ret_ptp = LOG_ON_PTP_E (ptp_canon_eos_setdevicepropvalue (params, cursub->propid, &propval, cursub->type));
+							if (ret_ptp != PTP_RC_OK) {
+								gp_context_error (context, _("The property '%s' / 0x%04x was not set (0x%04x: %s)."),
+										  _(cursub->label), cursub->propid, ret_ptp, _(ptp_strerror(ret_ptp, params->deviceinfo.VendorExtensionID)));
+								ret = translate_ptp_result (ret_ptp);
+							}
 						}
 						ptp_free_devicepropvalue(cursub->type, &propval);
 					} else
@@ -11754,7 +11840,7 @@ _set_config (Camera *camera, const char *confname, CameraWidget *window, GPConte
 					if (	((cursub->type & 0x7000) != 0x1000) ||
 						 ptp_operation_issupported(params, cursub->type)
 					)
-						ret = cursub->putfunc (camera, widget, &propval, &dpd);
+						ret = cursub->putfunc (camera, widget, &propval, &dpd, &alreadyset);
 					else
 						continue;
 				}
@@ -11770,7 +11856,7 @@ _set_config (Camera *camera, const char *confname, CameraWidget *window, GPConte
 				gp_widget_set_changed (widget, FALSE); /* clear flag */
 				GP_LOG_D ("Setting property '%s' / 0x%04x", cursub->label, cursub->propid);
 				memset(&dpd,0,sizeof(dpd));
-				ret = cursub->putfunc (camera, widget, &propval, &dpd);
+				ret = cursub->putfunc (camera, widget, &propval, &dpd, &alreadyset);
 				if (ret != GP_OK)
 					gp_context_error (context, _("Parsing the value of widget '%s' / 0x%04x failed with %d."), _(cursub->label), cursub->propid, ret);
 				if (mode == MODE_SINGLE_SET)

@@ -1225,6 +1225,9 @@ ptp_sigma_fp_getcapturestatus (PTPParams* params, unsigned int p1, SIGMAFP_Captu
 	status->status		= dtoh16a(&data[4]);
 	status->destination	= data[5];
 	/* data[6] is the checksum (sum of bytes 0->5 */
+	ptp_debug (params, "ptp_sigma_fp_getcapturestatus: imageid 0x%02x, imagedbhead 0x%02x, imagedbtail 0x%02x, status 0x%04x, dest 0x%02x", 
+		status->imageid, status->imagedbhead, status->imagedbtail, status->status, status->destination
+	);
 	return ret;
 }
 
@@ -5943,6 +5946,8 @@ ptp_fuji_getdeviceinfo (PTPParams* params, uint16_t **props, unsigned int *numpr
 
         PTP_CNT_INIT(ptp, PTP_OC_FUJI_GetDeviceInfo);
         ret = ptp_transaction(params, &ptp, PTP_DP_GETDATA, 0, &data, &size);
+
+	if (ret != PTP_RC_OK) return ret;
 
 	if (size < 8) {
 		free (data);

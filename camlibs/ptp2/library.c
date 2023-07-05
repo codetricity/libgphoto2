@@ -34,6 +34,7 @@
 #if defined(HAVE_ICONV) && defined(HAVE_LANGINFO_H)
 #include <langinfo.h>
 #endif
+#include <unistd.h>
 
 #include <gphoto2/gphoto2-library.h>
 #include <gphoto2/gphoto2-port-log.h>
@@ -1342,6 +1343,9 @@ static struct {
 	/* Elijah Parker, mail@timelapseplus.com */
 	{"Sony:DSC-A7S III (Control)",		0x054c, 0x0d18, PTP_CAP|PTP_CAP_PREVIEW},
 
+	/* https://github.com/gphoto/libgphoto2/issues/892 */
+	{"Sony:ILCE-1 (Control)",		0x054c, 0x0d1c, PTP_CAP|PTP_CAP_PREVIEW},
+
 	/* via email */
 	{"Sony:ILCE-7C (Control)",		0x054c, 0x0d2b, PTP_CAP|PTP_CAP_PREVIEW},
 
@@ -1353,6 +1357,9 @@ static struct {
 
 	/* https://github.com/gphoto/libgphoto2/issues/749 */
 	{"Sony:ILCE-7RM4A (PC Control)",	0x054c, 0x0d9f, PTP_CAP|PTP_CAP_PREVIEW},
+
+	/* https://github.com/gphoto/libgphoto2/issues/896 */
+	{"Sony:ILME-FX3 (PC Control)",		0x054c, 0x0da3, PTP_CAP|PTP_CAP_PREVIEW},
 
 	/* https://github.com/gphoto/libgphoto2/pull/782 */
 	{"Sony:Alpha-A7 IV (MTP mode)",		0x054c, 0x0da6, 0},
@@ -2500,6 +2507,8 @@ static struct {
 	{"Canon:EOS M50m2",			0x04a9, 0x32f9, PTP_CAP|PTP_CAP_PREVIEW},
 	/* Ingmar Rieger via email */
 	{"Canon:EOS R5 C",			0x04a9, 0x3303, PTP_CAP|PTP_CAP_PREVIEW},
+	/* https://github.com/gphoto/libgphoto2/issues/881 */
+	{"Canon:EOS R6m2",			0x04a9, 0x330b, PTP_CAP|PTP_CAP_PREVIEW},
 
 	/* Konica-Minolta PTP cameras */
 	{"Konica-Minolta:DiMAGE A2 (PTP mode)",        0x132b, 0x0001, 0},
@@ -2654,6 +2663,8 @@ static struct {
 	/* https://github.com/gphoto/libgphoto2/issues/603 */
 	{"Fuji:Fujifilm X-S10",			0x04cb, 0x02ea, PTP_CAP_PREVIEW},	/* only webcam mode apparently */
 	{"Fuji:Fujifilm X-H2",			0x04cb, 0x02f2, PTP_CAP|PTP_CAP_PREVIEW},
+	/* https://github.com/gphoto/libgphoto2/issues/888 */
+	{"Fuji:Fujifilm X-T5",			0x04cb, 0x02fc, PTP_CAP|PTP_CAP_PREVIEW},
 
 	{"Ricoh:Caplio R5 (PTP mode)",          0x05ca, 0x0110, 0},
 	{"Ricoh:Caplio GX (PTP mode)",          0x05ca, 0x0325, 0},
@@ -2685,6 +2696,8 @@ static struct {
 
 	/* Arda Kaan <ardakaan@gmail.com> */
 	{"Ricoh:WG-M2 (PTP mode)",        	0x25fb, 0x210b, 0},
+	/* https://github.com/libmtp/libmtp/issues/148 */
+	{"Ricoh:GR IIIx (PTP mode)",        	0x25fb, 0x25fb, 0},
 
 	/* Pentax cameras */
 	{"Pentax:Optio 43WR",                   0x0a17, 0x000d, 0},
@@ -2752,6 +2765,8 @@ static struct {
 
 	/* 522903503@qq.com */
 	{"Sigma:fp",				0x1003,	0xc432, PTP_CAP|PTP_CAP_PREVIEW},
+	/* https://github.com/gphoto/libgphoto2/issues/882 */
+	{"Sigma:fp L",				0x1003,	0xc442, PTP_CAP|PTP_CAP_PREVIEW},
 
 	/* Bernhard Wagner <me@bernhardwagner.net> */
 	{"Leica:M9",				0x1a98,	0x0002, PTP_CAP},
@@ -2788,6 +2803,10 @@ static struct {
 	{"GoPro:HERO9 Black",			0x2672, 0x004D, 0},
 	/* https://github.com/libmtp/libmtp/issues/103 */
 	{"GoPro:HERO10 Black",			0x2672, 0x0056, 0},
+	/* https://github.com/libmtp/libmtp/issues/136 */
+	{"GoPro:HERO11 Black",			0x2672, 0x0059, 0},
+	/* https://github.com/libmtp/libmtp/issues/162 */
+	{"GoPro:HERO11 Black mini",		0x2672, 0x005a, 0},
 #endif
 };
 
@@ -3004,6 +3023,11 @@ camera_abilities (CameraAbilitiesList *list)
 				(strstr(models[i].model,"EOS") || strstr(models[i].model,"Rebel"))
 			)
 				a.operations |= GP_OPERATION_TRIGGER_CAPTURE;
+
+			/* Enable for Panasonic */
+			if (models[i].usb_vendor == 0x04da)
+				a.operations |= GP_OPERATION_TRIGGER_CAPTURE;
+
 			/* Sony Alpha are also trigger capture capable */
 			if (	models[i].usb_vendor == 0x54c)
 				a.operations |= GP_OPERATION_TRIGGER_CAPTURE;
@@ -3231,7 +3255,7 @@ exitfailed:
 				(camera->port, GP_PORT_USB_ENDPOINT_INT);
 	}
 #if defined(HAVE_LIBWS232) && defined(WIN32)
-	else if ((camera->port!=NULL) && camera->port->type != GP_PORT_PTPIP) {
+	else if ((camera->port!=NULL) && (camera->port->type == GP_PORT_PTPIP)) {
 		WSACleanup();
 	}
 #endif
@@ -4828,6 +4852,7 @@ camera_sony_capture (Camera *camera, CameraCaptureType type, CameraFilePath *pat
 		!strcmp(params->deviceinfo.Model, "ILCE-7RM4")		||
 		!strcmp(params->deviceinfo.Model, "ILCE-7RM4A")		||
 		!strcmp(params->deviceinfo.Model, "DSC-RX0M2")		||
+		!strcmp(params->deviceinfo.Model, "ILCE-7M3")		||
 		!strcmp(params->deviceinfo.Model, "ILCE-7C")
 	)) {
 		/* For some as yet unknown reason the ZV-1, the RX100M7 and the A7 R4 need around 3 seconds startup time
@@ -5441,6 +5466,11 @@ downloadfile:
 	path->name[0]='\0';
 	path->folder[0]='\0';
 
+	/* Synthesize a capture complete event to avoid waits. */
+	event.Code = PTP_EC_CaptureComplete;
+	event.Nparam = 0;
+	ptp_add_event (params, &event);
+
 	if (newobject != 0) /* NOTE: association add handled */
 		return add_object_to_fs_and_path (camera, newobject, path, context);
 	return GP_ERROR;
@@ -5520,13 +5550,17 @@ camera_sigma_fp_capture (Camera *camera, CameraCaptureType type, CameraFilePath 
 			}
 			return GP_ERROR;
 		}
+#if 0
+		/* the 0x80 flag seems to happen only if the camera starts doing stuff */
 		if ((captstatus.status & 0xf000) == 0x8000) {	/* success */
 			break;
 		}
+#endif
 		if (captstatus.status == 0x0002) break;	/* success ? */
-		if (captstatus.status == 0x0005) break;	/* success */
+		/* 4 means processing */
+		if (captstatus.status == 0x0005) break;	/* 5 means complete image created */
 
-		usleep(20*1000);
+		usleep(200*1000);
 
 	}
 	C_PTP_REP (ptp_sigma_fp_getpictfileinfo2(params, &pictfileinfoex2));
@@ -5909,11 +5943,12 @@ camera_trigger_canon_eos_capture (Camera *camera, GPContext *context)
 	if (ptp_operation_issupported(params, PTP_OC_CANON_EOS_RemoteReleaseOn)) {
 		if (!is_canon_eos_m (params)) {
 			/* Regular EOS */
-			int 			manualfocus = 0, foundfocusinfo = 0;
+			uint16_t	res;
+			int 		manualfocus = 0, foundfocusinfo = 0;
 
 			/* are we in manual focus mode ... value would be 3 */
 			if (PTP_RC_OK == ptp_canon_eos_getdevicepropdesc (params, PTP_DPC_CANON_EOS_FocusMode, &dpd)) {
-				if ((dpd.DataType == PTP_DTC_UINT16) && (dpd.CurrentValue.u16 == 3)) {
+				if ((dpd.DataType == PTP_DTC_UINT32) && (dpd.CurrentValue.u32 == 3)) {
 					manualfocus = 1;
 					/* will do 1 pass through the focusing loop for good measure */
 					GP_LOG_D("detected manual focus. skipping focus detection logic");
@@ -5970,7 +6005,16 @@ camera_trigger_canon_eos_capture (Camera *camera, GPContext *context)
 			}
 			/* full press now */
 
-			C_PTP_REP_MSG (ptp_canon_eos_remotereleaseon (params, 2, 0), _("Canon EOS Full-Press failed"));
+			res = LOG_ON_PTP_E (ptp_canon_eos_remotereleaseon (params, 2, 0));
+			if (res != PTP_RC_OK) {
+				/* if the Full Press failed, try to roll back the release and do not exit Half-Pressed. */
+				ptp_check_eos_events (params);
+				C_PTP_REP_MSG (ptp_canon_eos_remotereleaseoff (params, 1), _("Canon EOS Half-Release failed"));
+				ptp_check_eos_events (params);
+				C_PTP_REP_MSG (res, _("Canon EOS Full-Press failed"));
+				/* safety, should not arrive here */
+				return GP_ERROR;
+			}
 			/* no event check between */
 			/* full release now */
 			C_PTP_REP_MSG (ptp_canon_eos_remotereleaseoff (params, 2), _("Canon EOS Full-Release failed"));
@@ -7281,8 +7325,19 @@ handleregular:
 		PTPDevicePropDesc	dpd;
 
 		*eventtype = GP_EVENT_UNKNOWN;
-		/* cached devprop should hafve been flushed I think... */
-		C_PTP_REP (ptp_generic_getdevicepropdesc (params, event.Param1&0xffff, &dpd));
+		/* cached devprop should have been flushed I think... */
+		ret = ptp_generic_getdevicepropdesc (params, event.Param1&0xffff, &dpd);
+
+		/* Nikon Z6 II reports a prop changed event 501c, but getdevicepropdesc fails with devicepropnot supported
+		 * (reported via email)
+		 */
+		if (ret == PTP_RC_DevicePropNotSupported) {
+			C_MEM (*eventdata = malloc(strlen("PTP Property 0123 changed")+1));
+			sprintf (*eventdata, "PTP Property %04x changed", event.Param1 & 0xffff);
+			break;
+		}
+		if (ret != PTP_RC_OK)
+			C_PTP_REP (ret);
 
 		ret = camera_lookup_by_property(camera, &dpd, &name, &content, context);
 		if (ret == GP_OK) {
@@ -7365,6 +7420,11 @@ handleregular:
 	return GP_OK;
 }
 
+static int ptp_max(int a, int b) {
+	if (a > b) return a;
+	return b;
+}
+
 static int
 snprintf_ptp_property (char *txt, int spaceleft, PTPPropertyValue *data, uint16_t dt)
 {
@@ -7373,14 +7433,19 @@ snprintf_ptp_property (char *txt, int spaceleft, PTPPropertyValue *data, uint16_
 	if (dt & PTP_DTC_ARRAY_MASK) {
 		unsigned int i;
 		const char *origtxt = txt;
-#define SPACE_LEFT (origtxt + spaceleft - txt)
+#define SPACE_LEFT ptp_max(0, (origtxt + spaceleft - txt))
 
 		txt += snprintf (txt, SPACE_LEFT, "a[%d] ", data->a.count);
-		for ( i=0; i<data->a.count; i++) {
+		unsigned int n_to_print = data->a.count;
+		if (n_to_print > 64)
+			n_to_print = 64;
+		for ( i=0; i<n_to_print; i++) {
 			txt += snprintf_ptp_property (txt, SPACE_LEFT, &data->a.v[i], dt & ~PTP_DTC_ARRAY_MASK);
-			if (i!=data->a.count-1)
+			if (i!=n_to_print-1)
 				txt += snprintf (txt, SPACE_LEFT, ",");
 		}
+		if (n_to_print < data->a.count)
+			txt += snprintf (txt, SPACE_LEFT, ", ...");
 		return txt - origtxt;
 #undef SPACE_LEFT
 	} else {
@@ -7518,11 +7583,6 @@ nikon_curve_put (CameraFilesystem *fs, const char *folder, CameraFile *file,
 {
 	/* not yet */
 	return (GP_OK);
-}
-
-static int ptp_max(int a, int b) {
-	if (a > b) return a;
-	return b;
 }
 
 static int
@@ -9562,8 +9622,8 @@ debug_objectinfo(PTPParams *params, uint32_t oid, PTPObjectInfo *oi) {
 	GP_LOG_D ("  AssociationType: 0x%04x", oi->AssociationType);
 	GP_LOG_D ("  AssociationDesc: 0x%08x", oi->AssociationDesc);
 	GP_LOG_D ("  SequenceNumber: 0x%08x", oi->SequenceNumber);
-	GP_LOG_D ("  ModificationDate: 0x%08x", (unsigned int)oi->ModificationDate);
-	GP_LOG_D ("  CaptureDate: 0x%08x", (unsigned int)oi->CaptureDate);
+	GP_LOG_D ("  ModificationDate: 0x%08lx", (unsigned long)oi->ModificationDate);
+	GP_LOG_D ("  CaptureDate: 0x%08lx", (unsigned long)oi->CaptureDate);
 }
 
 static CameraFilesystemFuncs fsfuncs = {

@@ -3098,6 +3098,12 @@ typedef struct _PTPCanonEOSDeviceInfo {
 #define PTP_DPC_SONY_PriorityMode			0xD25A
 #define PTP_DPC_SONY_AutoFocus				0xD2C1 /* ? half-press */
 #define PTP_DPC_SONY_Capture				0xD2C2 /* ? full-press */
+#define PTP_DPC_SONY_FocusMagnify			0xD2CB
+#define PTP_DPC_SONY_FocusMagnifyExit			0xD2CC
+#define PTP_DPC_SONY_FocusMagnifyUp	    		0xD2CD
+#define PTP_DPC_SONY_FocusMagnifyDown			0xD2CE
+#define PTP_DPC_SONY_FocusMagnifyLeft			0xD2CF
+#define PTP_DPC_SONY_FocusMagnifyRight			0xD2D0
 /* D2DB (2) , D2D3 (2) , D2C8 (2) also seen in Camera Remote related to D2C2 */
 /* S1 ?
  * AEL - d2c3
@@ -4672,7 +4678,7 @@ uint16_t ptp_olympus_omd_move_focus (PTPParams* params, uint32_t direction, uint
 static inline int
 ptp_operation_issupported(PTPParams* params, uint16_t operation)
 {
-	unsigned int i=0;
+	uint32_t i=0;
 
 	for (;i<params->deviceinfo.OperationsSupported_len;i++) {
 		if (params->deviceinfo.OperationsSupported[i]==operation)

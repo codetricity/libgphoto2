@@ -2198,7 +2198,7 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 					free (dpd->FORM.Enum.SupportedValue);
 					dpd->FORM.Enum.SupportedValue = NULL;
 					dpd->FORM.Enum.NumberOfValues = 0;
-					ptp_debug (params ,"event %d: data type 0x%04x of %x unhandled, size %d, raw values:", i, dpd->DataType, proptype, dtoh32a(xdata), size);
+					ptp_debug (params ,"event %d: data type 0x%04x of %x unhandled, size %d, raw values:", i, dpd->DataType, proptype, size);
 					for (j=0;j<(size-PTP_ece_Prop_Desc_Data)/4;j++, xdata+=4) /* 4 is good for propxtype 3 */
 						ptp_debug (params, "    %3d: 0x%8x", j, dtoh32a(xdata));
 					break;
@@ -2299,9 +2299,19 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 				case PTP_DPC_CANON_EOS_ModelID:
 				case PTP_DPC_CANON_EOS_LensID:
 				case PTP_DPC_CANON_EOS_StroboFiring:
+				case PTP_DPC_CANON_EOS_StroboDispState:
+				case PTP_DPC_CANON_EOS_LvCFilterKind:
+				case PTP_DPC_CANON_EOS_CADarkBright:
+				case PTP_DPC_CANON_EOS_ErrorForDisplay:
+				case PTP_DPC_CANON_EOS_ExposureSimMode:
+				case PTP_DPC_CANON_EOS_WindCut:
+				case PTP_DPC_CANON_EOS_MovieRecordVolume:
+				case PTP_DPC_CANON_EOS_ExtenderType:
+				case PTP_DPC_CANON_EOS_AEModeMovie:
 				case PTP_DPC_CANON_EOS_AFSelectFocusArea:
 				case PTP_DPC_CANON_EOS_ContinousAFMode:
 				case PTP_DPC_CANON_EOS_MirrorUpSetting:
+				case PTP_DPC_CANON_EOS_MirrorDownStatus:
 				case PTP_DPC_CANON_EOS_OLCInfoVersion:
 				case PTP_DPC_CANON_EOS_PowerZoomPosition:
 				case PTP_DPC_CANON_EOS_PowerZoomSpeed:
@@ -2317,6 +2327,10 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 				case PTP_DPC_CANON_EOS_OneShotRawOn:
 				case PTP_DPC_CANON_EOS_FlashChargingState:
 				case PTP_DPC_CANON_EOS_MovieServoAF:
+				case PTP_DPC_CANON_EOS_MultiAspect:
+				case PTP_DPC_CANON_EOS_EVFOutputDevice:
+				case PTP_DPC_CANON_EOS_FocusMode:
+				case PTP_DPC_CANON_EOS_MirrorLockupState:
 					dpd->DataType = PTP_DTC_UINT32;
 					break;
 				/* enumeration for AEM is never provided, but is available to set */
@@ -2329,7 +2343,6 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 				case PTP_DPC_CANON_EOS_Aperture:
 				case PTP_DPC_CANON_EOS_ShutterSpeed:
 				case PTP_DPC_CANON_EOS_ISOSpeed:
-				case PTP_DPC_CANON_EOS_FocusMode:
 				case PTP_DPC_CANON_EOS_ColorSpace:
 				case PTP_DPC_CANON_EOS_BatteryPower:
 				case PTP_DPC_CANON_EOS_BatterySelect:
@@ -2339,10 +2352,8 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 				case PTP_DPC_CANON_EOS_BracketMode:
 				case PTP_DPC_CANON_EOS_QuickReviewTime:
 				case PTP_DPC_CANON_EOS_EVFMode:
-				case PTP_DPC_CANON_EOS_EVFOutputDevice:
 				case PTP_DPC_CANON_EOS_EVFRecordStatus:
 				case PTP_DPC_CANON_EOS_HighISOSettingNoiseReduction:
-				case PTP_DPC_CANON_EOS_MultiAspect: /* actually a 32bit value, but lets try it for easyness */
 					dpd->DataType = PTP_DTC_UINT16;
 					break;
 				case PTP_DPC_CANON_EOS_PictureStyle:
@@ -2398,7 +2409,6 @@ ptp_unpack_CANON_changes (PTPParams *params, unsigned char* data, unsigned int d
 				case PTP_DPC_CANON_EOS_EVFSharpness:
 				case PTP_DPC_CANON_EOS_EVFWBMode:
 				case PTP_DPC_CANON_EOS_EVFClickWBCoeffs:
-				case PTP_DPC_CANON_EOS_ExposureSimMode:
 				case PTP_DPC_CANON_EOS_MovSize:
 				case PTP_DPC_CANON_EOS_DepthOfField:
 				case PTP_DPC_CANON_EOS_Brightness:
@@ -2564,11 +2574,11 @@ static unsigned int olcsizes[0x15][13] = {
 			if (olcver == 0) {
 				ce[i].type = PTP_CANON_EOS_CHANGES_TYPE_UNKNOWN;
 				ce[i].u.info = strdup("OLC version is unknown");
-				ptp_debug (params, "event %d: OLC version is 0, skipping (might get set later)");
+				ptp_debug (params, "event %d: OLC version is 0, skipping (might get set later)", i);
 				break;
 			}
 			if (olcver >= sizeof(olcsizes)/sizeof(olcsizes[0])) {
-				ptp_debug (params, "event %d: OLC version is %d, assuming latest known", olcver);
+				ptp_debug (params, "event %d: OLC version is %d, assuming latest known", i, olcver);
 				olcver = sizeof(olcsizes)/sizeof(olcsizes[0])-1;
 			}
 
@@ -2603,7 +2613,7 @@ static unsigned int olcsizes[0x15][13] = {
 				if (!(mask & curmask))
 					continue;
 				if (curoff+olcsizes[olcver][j] > size) {
-					ptp_debug (params, "event %d: size of entry ", i, mask, len, len - 8);
+					ptp_debug (params, "event %d: mask 0x%x size of olc entry %d exceeds total size %d", i, mask, curoff+olcsizes[olcver][j], size);
 					break;
 				}
 				ptp_debug (params, "event %d: olcmask 0x%04x", i, curmask);
